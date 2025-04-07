@@ -1,8 +1,9 @@
 package main
 
 import (
+	"github.com/LeonEstrak/retro-drop/backend/database"
+	"github.com/LeonEstrak/retro-drop/backend/internalUtils"
 	"github.com/LeonEstrak/retro-drop/backend/routes"
-	"github.com/LeonEstrak/retro-drop/backend/utils"
 
 	"fmt"
 )
@@ -10,8 +11,13 @@ import (
 func main() {
 	PORT := 9090
 
-	logger := utils.GetLogger()
+	logger := internalUtils.GetLogger()
 
+	// Initialize the DB connection
+	db := database.GetDB()
+	defer db.Close()
+
+	// Initialize the routes
 	router := routes.SetupRoutes()
 
 	logger.Debug("Starting server on port %d", PORT)

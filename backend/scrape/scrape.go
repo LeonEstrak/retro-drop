@@ -3,11 +3,12 @@ package scrape
 import (
 	"strings"
 
-	"github.com/LeonEstrak/retro-drop/backend/utils"
+	"github.com/LeonEstrak/retro-drop/backend/internalTypes"
+	"github.com/LeonEstrak/retro-drop/backend/internalUtils"
 	"github.com/gocolly/colly/v2"
 )
 
-var logger = utils.GetLogger()
+var logger = internalUtils.GetLogger()
 
 func ScrapeListOfGames(url string) []string {
 	listOfGames := []string{}
@@ -39,8 +40,8 @@ func ScrapeListOfGames(url string) []string {
 	return listOfGames
 }
 
-func ScrapeAllDownloadLinks(url string) map[string]string {
-	downloadLinks := map[string]string{}
+func ScrapeAllDownloadLinks(url string) []internalTypes.Games {
+	gameObjects := []internalTypes.Games{}
 
 	c := colly.NewCollector()
 
@@ -63,9 +64,12 @@ func ScrapeAllDownloadLinks(url string) map[string]string {
 
 		logger.Debug("Found Title: %s", gameTitle)
 
-		downloadLinks[gameTitle] = e.Request.AbsoluteURL(gameDownloadLink)
+		gameObjects = append(gameObjects, internalTypes.Games{
+			GameTitle:   gameTitle,
+			DownloadURL: gameDownloadLink,
+		})
 	})
 
 	c.Visit(url)
-	return downloadLinks
+	return gameObjects
 }

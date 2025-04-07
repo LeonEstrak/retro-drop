@@ -2,37 +2,52 @@ package database
 
 import (
 	"database/sql"
+	"os"
+	"sync"
 
-	"github.com/LeonEstrak/retro-drop/backend/utils"
+	"github.com/LeonEstrak/retro-drop/backend/constants"
+	"github.com/LeonEstrak/retro-drop/backend/internalTypes"
+	"github.com/LeonEstrak/retro-drop/backend/internalUtils"
 	_ "github.com/mattn/go-sqlite3"
 )
 
-var logger = utils.GetLogger()
+var (
+	once sync.Once
+	db   *Database
+)
 
-// OpenDB opens a SQLite database at the provided dbPath.
-// It logs a fatal error and exits if the dbPath is empty
-// or if the database cannot be opened. Returns a pointer
-// to the sql.DB instance on success.
-func OpenDB(dbPath string) *sql.DB {
-	if dbPath == "" {
-		logger.Fatal("Database path is empty")
-	}
-	db, err := sql.Open("sqlite3", dbPath)
-	if err != nil {
-		logger.Fatal("Failed to open database: %v", err)
-	}
+var logger = internalUtils.GetLogger()
+
+type Database struct {
+	sql *sql.DB
+}
+
+// GetDB returns a pointer to the SQLite database instance.
+//
+// The database is opened on the first call to GetDB and the same
+// instance is returned on subsequent calls. The database is opened
+// at the path specified by the constant DB_PATH.
+func GetDB() *Database {
+	once.Do(func() {
+		sqlObject, err := sql.Open("sqlite3", constants.DB_PATH)
+		if err != nil {
+			logger.Fatal("Failed to open database: %v", err)
+			os.Exit(1)
+		}
+
+		// Initialize the DB Object
+		db = &Database{sql: sqlObject}
+	})
+
 	return db
 }
 
-type Games struct {
-	ID          int
-	GameTitle   string
-	System      string
-	DownloadURL string
+func (db *Database) Close() {
+	db.sql.Close()
 }
 
-func CreateTables(db *sql.DB) error {
-	_, err := db.Exec(`
+func (db *Database) CreateTables() error {
+	_, err := db.sql.Exec(`
 		CREATE TABLE games (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			game_title TEXT,
@@ -47,13 +62,63 @@ func CreateTables(db *sql.DB) error {
 	return nil
 }
 
-func DropTables(db *sql.DB) error {
-	_, err := db.Exec(`
+func (db *Database) DropTables() error {
+	_, err := db.sql.Exec(`
 		DROP TABLE IF EXISTS games;
 	`)
 	if err != nil {
 		logger.Error("Failed to drop tables: %v", err)
 		return err
+	}
+	return nil
+}
+
+func (db *Database) GetGamesFromDB(system string, limit int) ([]internalTypes.Games, error) {
+	query := "SELECT id, game_title, system, download_url FROM games"
+	queryArgs := []any{}
+	if system != "" {
+		query += " WHERE system = ?"
+		queryArgs = append(queryArgs, system)
+	}
+	if limit > 0 {
+		query += " LIMIT ?"
+		queryArgs = append(queryArgs, limit)
+	}
+	rows, err := db.sql.Query(query, queryArgs...)
+
+	if err != nil {
+		logger.Error("Failed to query database: %v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	games := []internalTypes.Games{}
+	for rows.Next() {
+		var id int
+		var gameTitle string
+		var system string
+		var downloadURL string
+		if err := rows.Scan(&id, &gameTitle, &system, &downloadURL); err != nil {
+			logger.Error("Failed to scan row: %v", err)
+			return nil, err
+		}
+		games = append(games, internalTypes.Games{
+			ID:          id,
+			GameTitle:   gameTitle,
+			System:      system,
+			DownloadURL: downloadURL,
+		})
+	}
+	return games, nil
+}
+
+func (db *Database) InsertListOfGamesToDB(games []internalTypes.Games) error {
+	for _, game := range games {
+		_, err := db.sql.Exec("INSERT INTO games (game_title, system, download_url) VALUES (?, ?, ?)", game.GameTitle, game.System, game.DownloadURL)
+		if err != nil {
+			logger.Error("Failed to insert game into database: %v", err)
+			return err
+		}
 	}
 	return nil
 }

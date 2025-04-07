@@ -2,6 +2,8 @@ module github.com/LeonEstrak/retro-drop/backend
 
 go 1.24.2
 
+require golang.org/x/tools v0.31.0
+
 require (
 	github.com/PuerkitoBio/goquery v1.10.2 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
